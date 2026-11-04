@@ -11,6 +11,13 @@ import { studioApiFetch } from "../utils/studioApiFetch";
 
 // ── Types ──
 
+declare global {
+  interface Window {
+    /** Set by a desktop host whose own agent chat should receive "describe a change" prompts. */
+    hyperframesHostAgent?: { send(prompt: string, instruction: string): boolean };
+  }
+}
+
 export interface UseAskAgentModalParams {
   projectId: string | null;
   activeCompPath: string | null;
@@ -103,8 +110,9 @@ export function useAskAgentModal({
         sourceFilePath: toProjectAbsolutePath(projectDir, targetPath),
       });
 
-      const copied = await copyTextToClipboard(prompt);
-      if (!copied) {
+      // A host app with its own agent takes the prompt; otherwise it goes on the clipboard.
+      const sentToHost = window.hyperframesHostAgent?.send(prompt, userInstruction) === true;
+      if (!sentToHost && !(await copyTextToClipboard(prompt))) {
         showToast("Could not copy prompt to clipboard.", "error");
         return;
       }
@@ -112,6 +120,7 @@ export function useAskAgentModal({
       setAgentModalOpen(false);
       setAgentPromptSelectionContext(undefined);
       setAgentModalAnchorPoint(null);
+      if (sentToHost) return;
       if (copiedAgentTimerRef.current) clearTimeout(copiedAgentTimerRef.current);
       setCopiedAgentPrompt(true);
       copiedAgentTimerRef.current = setTimeout(() => setCopiedAgentPrompt(false), 1600);

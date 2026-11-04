@@ -40,6 +40,7 @@ export function AskAgentModal({
   onSubmit,
   onClose,
 }: AskAgentModalProps) {
+  const sendsToHost = Boolean(window.hyperframesHostAgent);
   const [value, setValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -75,7 +76,7 @@ export function AskAgentModal({
         ref={containerRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Copy prompt to AI agent"
+        aria-label={sendsToHost ? "Send to the agent" : "Copy prompt to AI agent"}
         tabIndex={-1}
         className={`w-[480px] rounded-2xl border border-neutral-800 bg-neutral-950 shadow-2xl outline-hidden ${
           anchorPoint ? "fixed" : ""
@@ -85,7 +86,9 @@ export function AskAgentModal({
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800/60">
           <div>
-            <h3 className="text-sm font-medium text-neutral-200">Copy prompt to AI agent</h3>
+            <h3 className="text-sm font-medium text-neutral-200">
+              {sendsToHost ? "Send to the agent" : "Copy prompt to AI agent"}
+            </h3>
             <p className="text-xs text-neutral-500 mt-0.5">
               {selectionLabel.length > 50 ? `${selectionLabel.slice(0, 49)}…` : selectionLabel}
             </p>
@@ -135,14 +138,15 @@ export function AskAgentModal({
         </div>
         <div className="flex items-center justify-between px-5 py-3 border-t border-neutral-800/60">
           <span className="text-[11px] text-neutral-600">
-            {navigator.platform.includes("Mac") ? "⌘" : "Ctrl"}+Enter to copy
+            {navigator.platform.includes("Mac") ? "⌘" : "Ctrl"}+Enter to{" "}
+            {sendsToHost ? "send" : "copy"}
           </span>
           <button
             className="px-4 py-1.5 rounded-lg bg-accent text-xs font-medium text-on-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed"
             disabled={!value.trim()}
             onClick={handleSubmit}
           >
-            Copy prompt
+            {sendsToHost ? "Send" : "Copy prompt"}
           </button>
         </div>
       </div>
