@@ -84,6 +84,12 @@ hyperframes lambda render ./my-project --width 1920 --height 1080 --wait
 
 The `--wait` flag blocks and streams per-chunk progress + accrued cost; drop it to fire-and-forget, then poll with `hyperframes lambda progress <renderId>` on your own cadence.
 
+To get the finished video onto your machine, add `--download <folder or file>`. It implies `--wait` and saves the output from S3 once the render succeeds; a folder gets `<project>.<ext>`:
+
+```bash
+hyperframes lambda render ./ad-07 --width 1080 --height 1920 --download ~/Desktop/Renders
+```
+
 See the [CLI reference](/packages/cli#hyperframes-lambda) for full flag documentation.
 
 #### Pre-staging a project with `sites create`

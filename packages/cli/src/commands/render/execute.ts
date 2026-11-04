@@ -24,6 +24,13 @@ import { applyRenderEnvironment, renderOutputDirectory, type RenderPlan } from "
 import type { RenderOptions, SingleRenderResult } from "../render.js";
 import type { RenderCancellationScope } from "../../utils/renderCancellation.js";
 import { runRenderSetupWorker } from "../../utils/cancellableProcess.js";
+import {
+  acquireRenderSlot,
+  MAX_PARALLEL_RENDERS_ENV,
+  type RenderSlot,
+  renderSlotLimit,
+  workersPerRender,
+} from "../../utils/renderQueue.js";
 
 type RenderExecutor = (
   projectDir: string,
@@ -104,32 +111,71 @@ export async function executeRenderPlan(
   await runResolutionPreflight(plan, dependencies.checkResolution);
   assertRenderActive(cancellation);
 
-  if (plan.batchPath && batchModule && preparedBatch) {
-    await executeBatchRender(
-      plan,
-      browserPath,
-      batchModule,
-      preparedBatch,
-      dependencies,
-      cancellation,
-    );
-    return;
-  }
+  // Lint, browser download and preflight run before the queue: a render
+  // that would fail them should fail now, not after waiting for a slot.
+  const slot = await acquireRenderSlotForPlan(plan, cancellation?.signal);
+  try {
+    assertRenderActive(cancellation);
+    if (plan.batchPath && batchModule && preparedBatch) {
+      await executeBatchRender(
+        plan,
+        browserPath,
+        batchModule,
+        preparedBatch,
+        dependencies,
+        cancellation,
+      );
+      return;
+    }
 
-  if (variables && Object.keys(variables).length > 0) {
-    const issues = validateVariablesAgainstProject(plan.renderTarget, variables);
-    reportVariableIssues(issues, { strict: plan.strictVariables, quiet: plan.effectiveQuiet });
-  }
+    if (variables && Object.keys(variables).length > 0) {
+      const issues = validateVariablesAgainstProject(plan.renderTarget, variables);
+      reportVariableIssues(issues, { strict: plan.strictVariables, quiet: plan.effectiveQuiet });
+    }
 
-  if (plan.proresProfile && !PRORES_PROFILES[plan.proresProfile].alpha && !plan.effectiveQuiet) {
-    console.log(
-      c.dim(`ProRes ${plan.proresProfile} has no alpha channel: transparent areas render black.`),
-    );
-  }
+    if (plan.proresProfile && !PRORES_PROFILES[plan.proresProfile].alpha && !plan.effectiveQuiet) {
+      console.log(
+        c.dim(`ProRes ${plan.proresProfile} has no alpha channel: transparent areas render black.`),
+      );
+    }
 
-  const options = renderOptionsFromPlan(plan, browserPath, variables);
-  const execute = plan.useDocker ? dependencies.renderDocker : dependencies.renderLocal;
-  await execute(plan.project.dir, plan.outputPath, options, cancellation);
+    const options = renderOptionsFromPlan(plan, browserPath, variables);
+    const execute = plan.useDocker ? dependencies.renderDocker : dependencies.renderLocal;
+    await execute(plan.project.dir, plan.outputPath, options, cancellation);
+  } finally {
+    slot.release();
+  }
+}
+
+/**
+ * Hold one of this machine's render slots for the render, and when several
+ * renders may share the machine, cap this one's auto worker count to its
+ * share. An explicit `--workers` or `PRODUCER_MAX_WORKERS` is left alone.
+ */
+export async function acquireRenderSlotForPlan(
+  plan: Pick<RenderPlan, "workers" | "quiet">,
+  signal?: AbortSignal,
+  options: { limit?: number; dir?: string; pollMs?: number } = {},
+): Promise<RenderSlot> {
+  const limit = options.limit ?? renderSlotLimit();
+  const slot = await acquireRenderSlot({
+    limit,
+    dir: options.dir,
+    pollMs: options.pollMs,
+    signal,
+    onWait: (running, max) => {
+      if (plan.quiet) return;
+      process.stderr.write(
+        `Render queue: ${running} of ${max} render slots on this machine are busy. ` +
+          `This render starts when one frees up (${MAX_PARALLEL_RENDERS_ENV} sets the limit).\n`,
+      );
+    },
+  });
+  const cap = workersPerRender(slot.limit);
+  if (cap !== undefined && plan.workers === undefined && !process.env.PRODUCER_MAX_WORKERS) {
+    process.env.PRODUCER_MAX_WORKERS = String(cap);
+  }
+  return slot;
 }
 
 /**

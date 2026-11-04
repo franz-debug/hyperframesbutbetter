@@ -9,9 +9,12 @@
  * `../render.test.ts` for the local-CLI preflight guardrails.
  */
 
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import lambdaCommand from "../lambda.js";
-import { buildLambdaRenderConfig, type RenderArgs } from "./render.js";
+import { buildLambdaRenderConfig, type RenderArgs, resolveDownloadPath } from "./render.js";
 
 const BASE_ARGS: RenderArgs = {
   projectDir: "/tmp/hf-project",
@@ -84,5 +87,37 @@ describe("lambda render chunk sizing", () => {
       : undefined;
     expect(chunkSizeArg?.description).not.toContain("240");
     expect(chunkSizeArg?.description).toContain("timeout");
+  });
+});
+
+describe("resolveDownloadPath — where --download saves the video", () => {
+  const s3Uri = "s3://bucket/renders/hf-render-1/output.mp4";
+
+  it("names the file after the project inside a folder path with no extension", () => {
+    expect(resolveDownloadPath("/Users/me/Desktop/Renders", "/work/ad-07", s3Uri)).toBe(
+      "/Users/me/Desktop/Renders/ad-07.mp4",
+    );
+  });
+
+  it("treats a trailing separator as a folder", () => {
+    expect(resolveDownloadPath("/out/v1.2/", "/work/ad-07", s3Uri)).toBe("/out/v1.2/ad-07.mp4");
+  });
+
+  it("treats an existing folder as a folder even when its name has a dot", () => {
+    const dir = mkdtempSync(join(tmpdir(), "hf-dl.v2-"));
+    try {
+      expect(resolveDownloadPath(dir, "/work/ad-07", s3Uri)).toBe(join(dir, "ad-07.mp4"));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses a file path as given and keeps the output's extension for folders", () => {
+    expect(resolveDownloadPath("/out/final-cut.mp4", "/work/ad-07", s3Uri)).toBe(
+      "/out/final-cut.mp4",
+    );
+    expect(resolveDownloadPath("/out", "/work/ad-07", "s3://b/renders/x/output.mov")).toBe(
+      "/out/ad-07.mov",
+    );
   });
 });

@@ -20,6 +20,7 @@ export {
   type RenderHandle,
   type RenderToLambdaOptions,
 } from "./renderToLambda.js";
+export { downloadRenderOutput, type DownloadRenderOutputOptions } from "./downloadRenderOutput.js";
 export {
   getRenderProgress,
   type GetRenderProgressOptions,
