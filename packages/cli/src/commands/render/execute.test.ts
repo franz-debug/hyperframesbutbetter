@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRenderPlan } from "./plan.js";
-import { batchRowRenderOptions, executeRenderPlan, renderOptionsFromPlan } from "./execute.js";
+import {
+  acquireRenderSlotForPlan,
+  batchRowRenderOptions,
+  executeRenderPlan,
+  renderOptionsFromPlan,
+} from "./execute.js";
 import * as manager from "../../browser/manager.js";
 import * as system from "../../telemetry/system.js";
 import { wantsDesktopHint } from "../render.js";
@@ -106,4 +111,61 @@ describe("a render on a nearly full disk", () => {
       expect(said.includes("Low disk space")).toBe(!downloads);
     },
   );
+});
+
+describe("acquireRenderSlotForPlan", () => {
+  let slotDir: string;
+  const savedMaxWorkers = process.env.PRODUCER_MAX_WORKERS;
+
+  beforeEach(() => {
+    slotDir = mkdtempSync(join(tmpdir(), "hf-render-slots-"));
+    delete process.env.PRODUCER_MAX_WORKERS;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    rmSync(slotDir, { recursive: true, force: true });
+    if (savedMaxWorkers === undefined) delete process.env.PRODUCER_MAX_WORKERS;
+    else process.env.PRODUCER_MAX_WORKERS = savedMaxWorkers;
+  });
+
+  it("caps auto workers to this render's share when renders share the machine", async () => {
+    const slot = await acquireRenderSlotForPlan({ quiet: true }, undefined, {
+      limit: 64,
+      dir: slotDir,
+    });
+    expect(process.env.PRODUCER_MAX_WORKERS).toBe("1");
+    slot.release();
+  });
+
+  it("leaves an explicit --workers and a lone render uncapped", async () => {
+    const explicit = await acquireRenderSlotForPlan({ quiet: true, workers: 6 }, undefined, {
+      limit: 64,
+      dir: slotDir,
+    });
+    explicit.release();
+    const lone = await acquireRenderSlotForPlan({ quiet: true }, undefined, {
+      limit: 1,
+      dir: slotDir,
+    });
+    lone.release();
+    expect(process.env.PRODUCER_MAX_WORKERS).toBeUndefined();
+  });
+
+  it("tells the person why the render is waiting, unless quiet", async () => {
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const held = await acquireRenderSlotForPlan({ quiet: true }, undefined, {
+      limit: 1,
+      dir: slotDir,
+    });
+    const waiting = acquireRenderSlotForPlan({ quiet: false }, undefined, {
+      limit: 1,
+      dir: slotDir,
+      pollMs: 10,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    held.release();
+    (await waiting).release();
+    expect(write).toHaveBeenCalledWith(expect.stringContaining("1 of 1 render slots"));
+  });
 });

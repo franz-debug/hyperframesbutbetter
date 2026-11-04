@@ -1763,6 +1763,25 @@ Low-memory detection reads **host** RAM, not cgroup or container limits, so
 containerised callers — including `--docker` — should set
 `PRODUCER_LOW_MEMORY_MODE` explicitly.
 
+#### Several renders at once
+
+Every `render` on a machine shares one queue, however many terminals or agents
+start them. By default two run at once on a machine with 8 or more cores and
+16 GB or more of RAM, and one otherwise; the rest wait, print why on stderr, and
+start as slots free up. Lint, the browser check and preflight run before the
+wait, so a render that would fail them fails at once. When two or more renders
+share the machine, each one's auto worker count is capped at its share of
+`cores - 2`, so their combined Chrome count stays near what one render would
+use. An explicit `--workers` or `PRODUCER_MAX_WORKERS` is left alone.
+
+| Environment variable               | Default         | Effect                                                     |
+| ---------------------------------- | --------------- | ---------------------------------------------------------- |
+| `HYPERFRAMES_MAX_PARALLEL_RENDERS` | auto (`2` or `1`) | Renders allowed at once on this machine; `0` turns the queue off |
+
+Held slots are files under `~/.hyperframes/render-slots/` (or
+`$HYPERFRAMES_CONFIG_DIR/render-slots/`). A slot whose process has exited frees
+itself, so a crashed render never blocks the queue.
+
 #### When a render times out
 
 Three separate budgets can expire, and the error message tells you which. All
@@ -2598,6 +2617,14 @@ hyperframes lambda render ./my-project --site-id=abc1234deadbeef0 --width 1920 -
 Starts a Step Functions execution and returns a `renderId` immediately — poll it
 with `lambda progress` — unless you pass `--wait`.
 
+`--download <path>` waits for the render and then saves the video from S3 to
+your machine. A path that is an existing folder, ends in `/`, or has no file
+extension is a folder, and the video inside it is named after the project
+(`~/Desktop/Renders` saves `~/Desktop/Renders/my-project.mp4`); any other path
+is the file itself. The file appears only once it has fully downloaded. If the
+download fails, the command exits non-zero and prints the S3 URI, where the
+render stays. With `--json`, the final progress document gains `downloadedTo`.
+
 ```bash
 hyperframes lambda render ./my-project \
   --width=1920 --height=1080 --fps=30 --format=mp4 \
@@ -2607,6 +2634,9 @@ hyperframes lambda render ./my-project \
 hyperframes lambda render ./my-template --site-id=abc1234deadbeef0 \
   --width=1920 --height=1080 \
   --variables '{"title":"Hello Alice","accent":"#ff0000"}'
+
+hyperframes lambda render ./ad-07 --width=1080 --height=1920 \
+  --download ~/Desktop/Renders
 ```
 
 Variables travel inside the Step Functions Standard execution input, which AWS

@@ -215,6 +215,11 @@ export default defineCommand({
       default: false,
     },
     wait: { type: "boolean", description: "Block until the render finishes" },
+    download: {
+      type: "string",
+      description:
+        "render: once the render succeeds, save the video to this file, or into this folder as <project>.<ext> (implies --wait)",
+    },
     "wait-interval-ms": {
       type: "string",
       description: "Poll cadence in ms when --wait is set (default: 5000)",
@@ -354,6 +359,7 @@ export default defineCommand({
           json: Boolean(args.json),
           wait: Boolean(args.wait),
           waitIntervalMs: parsePositiveInt(args["wait-interval-ms"], "--wait-interval-ms") ?? 5000,
+          download: args.download as string | undefined,
         });
         return;
       }

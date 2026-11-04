@@ -5,8 +5,8 @@ import { setCommandExitCode } from "../../utils/commandResult.js";
  * poll — use `hyperframes lambda progress` for that.
  */
 
-import { existsSync } from "node:fs";
-import { join, resolve as resolvePath } from "node:path";
+import { existsSync, statSync } from "node:fs";
+import { basename, extname, join, resolve as resolvePath, sep } from "node:path";
 import type {
   DistributedFormat,
   SerializableDistributedRenderConfig,
@@ -78,6 +78,11 @@ export interface RenderArgs extends DeliveryFlagValues {
   wait: boolean;
   /** Poll cadence in ms when `--wait` is set. */
   waitIntervalMs: number;
+  /**
+   * `--download <path>`: once the render succeeds, copy the output from S3 to
+   * this local file, or into this folder as `<project>.<ext>`. Implies `--wait`.
+   */
+  download?: string;
 }
 
 // fallow-ignore-next-line complexity
@@ -127,6 +132,8 @@ export async function runRender(args: RenderArgs): Promise<void> {
     }
   }
 
+  if (args.download) args = { ...args, wait: true };
+
   const config: SerializableDistributedRenderConfig = buildLambdaRenderConfig(
     args,
     variables,
@@ -156,7 +163,7 @@ export async function runRender(args: RenderArgs): Promise<void> {
     // both, producing two concatenated JSON blobs that `jq -r` would
     // misparse.
     if (args.wait) {
-      await waitForCompletion(handle.executionArn, stack, args.waitIntervalMs, args.json);
+      await waitForCompletion(handle.executionArn, stack, args, projectDir);
     } else {
       console.log(JSON.stringify(handle, null, 2));
     }
@@ -171,7 +178,7 @@ export async function runRender(args: RenderArgs): Promise<void> {
   console.log(`  ${c.dim("Stack state:")}   ${stateFilePath(args.stackName)}`);
   console.log();
   if (args.wait) {
-    await waitForCompletion(handle.executionArn, stack, args.waitIntervalMs, args.json);
+    await waitForCompletion(handle.executionArn, stack, args, projectDir);
     return;
   }
   console.log(c.dim(`Poll with: hyperframes lambda progress ${handle.renderId}`));
@@ -180,11 +187,12 @@ export async function runRender(args: RenderArgs): Promise<void> {
 async function waitForCompletion(
   executionArn: string,
   stack: StackOutputs,
-  intervalMs: number,
-  json: boolean,
+  args: Pick<RenderArgs, "waitIntervalMs" | "json" | "download">,
+  projectDir: string,
 ): Promise<void> {
+  const { waitIntervalMs: intervalMs, json } = args;
   // Lazy import to avoid pulling SFN client when only `render --no-wait` is used.
-  const { getRenderProgress } = await loadSDK();
+  const { getRenderProgress, downloadRenderOutput } = await loadSDK();
   let lastRendered = -1;
   const warned = new Set<string>();
   while (true) {
@@ -207,12 +215,30 @@ async function waitForCompletion(
       );
     }
     if (progress.status !== "RUNNING") {
+      let downloadedTo: string | undefined;
+      if (args.download && progress.status === "SUCCEEDED" && progress.outputFile) {
+        const s3Uri = progress.outputFile.s3Uri;
+        const destPath = resolveDownloadPath(args.download, projectDir, s3Uri);
+        if (!json) console.log(c.dim(`  Downloading to ${destPath}…`));
+        try {
+          downloadedTo = await downloadRenderOutput({ s3Uri, destPath, region: stack.region });
+        } catch (error) {
+          // The render itself succeeded and stays in S3; only the copy failed.
+          const detail = error instanceof Error ? error.message : String(error);
+          console.error(c.error(`Download failed: ${detail}`));
+          console.error(c.dim(`  The render is still at ${s3Uri}.`));
+          setCommandExitCode(1);
+        }
+      }
       if (json) {
-        console.log(JSON.stringify(progress, null, 2));
+        console.log(
+          JSON.stringify(downloadedTo ? { ...progress, downloadedTo } : progress, null, 2),
+        );
       } else if (progress.status === "SUCCEEDED" && progress.outputFile) {
         console.log();
         console.log(c.success("Render complete."));
         console.log(`  ${c.dim("Output:")}        ${progress.outputFile.s3Uri}`);
+        if (downloadedTo) console.log(`  ${c.dim("Saved to:")}      ${downloadedTo}`);
         console.log(`  ${c.dim("Size:")}          ${progress.outputFile.bytes ?? "?"} bytes`);
         console.log(`  ${c.dim("Total cost:")}    ${progress.costs.displayCost}`);
       } else {
@@ -227,6 +253,26 @@ async function waitForCompletion(
     }
     await sleep(intervalMs);
   }
+}
+
+/**
+ * Where `--download <path>` writes the finished video. A path that is an
+ * existing folder, ends in a separator, or has no file extension names a
+ * folder, and the file inside it is named after the project; anything else is
+ * the file itself.
+ */
+export function resolveDownloadPath(download: string, projectDir: string, s3Uri: string): string {
+  const target = resolvePath(download);
+  const ext = extname(s3Uri) || ".mp4";
+  let isDir = download.endsWith("/") || download.endsWith(sep) || extname(target) === "";
+  if (!isDir) {
+    try {
+      isDir = statSync(target).isDirectory();
+    } catch {
+      /* a new file path */
+    }
+  }
+  return isDir ? join(target, `${basename(resolvePath(projectDir))}${ext}`) : target;
 }
 
 function sleep(ms: number): Promise<void> {
