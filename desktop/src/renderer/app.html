@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' bf-media: data:; media-src bf-media: https://static.heygen.ai; style-src 'self' 'unsafe-inline'"
+    />
+    <title>Better Frames</title>
+    <link rel="stylesheet" href="brand.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="titlebar drag">
+      <div class="nav no-drag">
+        <button id="go-back" class="icon-button" aria-label="Back" title="Back"></button>
+        <button id="go-forward" class="icon-button" aria-label="Forward" title="Forward"></button>
+        <button
+          id="toggle-sidebar"
+          class="icon-button"
+          aria-label="Toggle sidebar"
+          title="Toggle sidebar"
+        ></button>
+      </div>
+    </div>
+    <div class="layout">
+      <aside id="sidebar" class="sidebar"></aside>
+      <main id="view" class="view"></main>
+    </div>
+    <dialog id="ask" class="ask">
+      <form method="dialog">
+        <label id="ask-label" for="ask-input"></label>
+        <input id="ask-input" autocomplete="off" />
+        <div class="ask-row">
+          <button class="ghost" value="cancel">Cancel</button>
+          <button id="ask-ok" class="primary" value="ok">OK</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="app.js"></script>
+  </body>
+</html>

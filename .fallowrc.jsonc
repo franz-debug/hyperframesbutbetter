@@ -83,6 +83,9 @@
   ],
   "ignorePatterns": [
     "docs/**",
+    // A standalone Electron app with its own bun.lock, outside the workspace. Its entry points and
+    // the CSS classes it builds in code aren't visible to this analysis, so it reads as dead code.
+    "desktop/**",
     // Chrome browser binaries downloaded by puppeteer — not project source.
     "chrome/**",
     // Standalone spike scripts and benchmark runners used during R&D.

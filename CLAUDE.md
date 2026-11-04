@@ -89,6 +89,7 @@ registry/
   examples/             → Starter project templates
 docs/                   → Mintlify documentation site (hyperframes.heygen.com)
 skills/                 → AI agent skill definitions
+desktop/                → Personal Mac app around the editor (own bun.lock, not a workspace; read desktop/CLAUDE.md first)
 ```
 
 ## Key Conventions

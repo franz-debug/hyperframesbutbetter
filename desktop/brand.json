@@ -1,0 +1,20 @@
+{
+  "name": "Better Frames",
+  "appId": "dev.betterframes.desktop",
+  "tagline": "Make something.",
+  "logo": "assets/logo.svg",
+  "projectsDir": "~/.hyperframes-studio",
+  "colors": {
+    "accent": "#0E7F5F",
+    "accentHover": "#0B6B50",
+    "onAccent": "#FFFFFF",
+    "gradientFrom": "#26D07C",
+    "gradientTo": "#0E7F5F",
+    "background": "#EFEEEA",
+    "surface": "#FCFAF7",
+    "surfaceRaised": "#F3F1EC",
+    "border": "#E4E1DA",
+    "text": "#1C1A17",
+    "textMuted": "#77726A"
+  }
+}
