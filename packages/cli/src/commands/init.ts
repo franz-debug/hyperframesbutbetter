@@ -48,7 +48,6 @@ import { DEFAULT_MODEL, hasFFmpeg } from "../whisper/manager.js";
 import { TRANSCRIPT_FILE } from "../whisper/transcriptFile.js";
 import { initialModelForLanguage } from "../whisper/transcribe.js";
 import { findFFmpeg, findFFprobe, getFFmpegInstallHint } from "../browser/ffmpeg.js";
-import { VERSION } from "../version.js";
 import {
   CANVAS_DIMENSIONS,
   normalizeResolutionFlag,
@@ -308,12 +307,8 @@ function toPackageName(projectName: string): string {
   return normalized || "hyperframes-project";
 }
 
-function getHyperframesPackageSpecifier(): string {
-  return VERSION === "0.0.0-dev" ? "hyperframes" : `hyperframes@${VERSION}`;
-}
-
 function hyperframesScript(command: string): string {
-  return `npx --yes ${getHyperframesPackageSpecifier()} ${command}`;
+  return `hyperframes ${command}`;
 }
 
 function buildPackageScripts(): Record<string, string> {
