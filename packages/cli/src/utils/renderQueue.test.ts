@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   acquireRenderSlot,
+  acquireRenderSlotForStudio,
   liveRenderSlots,
   MAX_PARALLEL_RENDERS_ENV,
   renderSlotLimit,
@@ -107,5 +108,43 @@ describe("acquireRenderSlot", () => {
     const slot = await acquireRenderSlot({ limit: 0, dir });
     expect(readdirSync(dir)).toEqual([]);
     slot.release();
+  });
+});
+
+describe("acquireRenderSlotForStudio", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "hf-studio-render-queue-"));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("says it is waiting while the machine is full, then takes the slot that frees up", async () => {
+    const first = await acquireRenderSlot({ limit: 1, dir });
+    const state: { stage?: string } = {};
+    const waiting = acquireRenderSlotForStudio(state, new AbortController().signal, {
+      limit: 1,
+      dir,
+      pollMs: 5,
+    });
+    await expect.poll(() => state.stage).toContain("Waiting for a free render slot");
+    first.release();
+    const second = await waiting;
+    expect(liveRenderSlots(dir)).toHaveLength(1);
+    second.release();
+    expect(liveRenderSlots(dir)).toHaveLength(0);
+  });
+
+  it("rejects when the render is cancelled in the queue, holding no slot", async () => {
+    const first = await acquireRenderSlot({ limit: 1, dir });
+    const controller = new AbortController();
+    const waiting = acquireRenderSlotForStudio({}, controller.signal, { limit: 1, dir, pollMs: 5 });
+    controller.abort(new Error("cancelled"));
+    await expect(waiting).rejects.toThrow("cancelled");
+    expect(liveRenderSlots(dir)).toHaveLength(1);
+    first.release();
   });
 });

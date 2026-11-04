@@ -39,6 +39,7 @@ import { mountDesktopRoutes } from "./desktopRoutes.js";
 import { isDevMode } from "../utils/env.js";
 import { insideHostApp } from "../utils/desktopApp.js";
 import { runRenderSetupWorker } from "../utils/cancellableProcess.js";
+import { acquireRenderSlotForStudio, type RenderSlot } from "../utils/renderQueue.js";
 import type { ProjectLintResult } from "@hyperframes/lint";
 import { resolveRenderBrowser } from "../browser/preflight.js";
 import {
@@ -623,6 +624,7 @@ export function createStudioServer(options: StudioServerOptions): StudioServer {
       const cpu = startRenderCpuSampler(opts.telemetryOptOut !== true);
       const run = (async () => {
         let renderJob: RenderJob | undefined;
+        let slot: RenderSlot | undefined;
         const removeCancelledOutput = () => {
           // User-initiated cancel: not a failure. Remove any output so the
           // cancelled job doesn't resurrect in the render history.
@@ -639,6 +641,7 @@ export function createStudioServer(options: StudioServerOptions): StudioServer {
           }
         };
         try {
+          slot = await acquireRenderSlotForStudio(state, abortController.signal);
           const { createRenderJob, executeRenderJob } = await loadStudioProducer();
           const browser = await resolveRenderBrowser(abortController.signal);
           if (!process.env.PRODUCER_HEADLESS_SHELL_PATH) {
@@ -723,6 +726,7 @@ export function createStudioServer(options: StudioServerOptions): StudioServer {
             /* ignore */
           }
         } finally {
+          slot?.release();
           cpu.stop();
         }
       })();

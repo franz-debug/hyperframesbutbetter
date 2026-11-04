@@ -225,3 +225,29 @@ export async function acquireRenderSlot(options: AcquireRenderSlotOptions): Prom
   process.on("exit", release);
   return { limit, release };
 }
+
+/**
+ * Hold a slot for a render started from the Studio editor, so it shares the
+ * machine-wide queue with `hyperframes render`. While it waits, `state.stage`
+ * says so; an abort while waiting rejects, like any other wait.
+ */
+export async function acquireRenderSlotForStudio(
+  state: { stage?: string },
+  signal: AbortSignal,
+  options: { limit?: number; dir?: string; pollMs?: number } = {},
+): Promise<RenderSlot> {
+  const slot = await acquireRenderSlot({
+    limit: options.limit ?? renderSlotLimit(),
+    dir: options.dir,
+    pollMs: options.pollMs,
+    signal,
+    onWait: (running, max) => {
+      state.stage = `Waiting for a free render slot (${running} of ${max} busy)`;
+    },
+  });
+  const cap = workersPerRender(slot.limit);
+  if (cap !== undefined && !process.env.PRODUCER_MAX_WORKERS) {
+    process.env.PRODUCER_MAX_WORKERS = String(cap);
+  }
+  return slot;
+}

@@ -1776,7 +1776,7 @@ use. An explicit `--workers` or `PRODUCER_MAX_WORKERS` is left alone.
 
 | Environment variable               | Default         | Effect                                                     |
 | ---------------------------------- | --------------- | ---------------------------------------------------------- |
-| `HYPERFRAMES_MAX_PARALLEL_RENDERS` | auto (`2` or `1`) | Renders allowed at once on this machine; `0` turns the queue off |
+| `HYPERFRAMES_MAX_PARALLEL_RENDERS` | auto (`2` or `1`) | Renders allowed at once on this machine, including ones started from the Studio editor; `0` turns the queue off |
 
 Held slots are files under `~/.hyperframes/render-slots/` (or
 `$HYPERFRAMES_CONFIG_DIR/render-slots/`). A slot whose process has exited frees
